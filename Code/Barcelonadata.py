@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+import math
 import openpyxl
 import os
 import glob
@@ -7,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import altair as alt
+from mpl_toolkits.mplot3d import Axes3D
 from mplsoccer import Pitch, VerticalPitch, FontManager
 from scipy.stats import gaussian_kde
 
@@ -111,6 +113,15 @@ def perceived_length(shot_location):
     angle_deg = np.degrees(angle_rad)
     return angle_deg
 
+def calculate_distance(shot_location):
+    x_dist = 120 - shot_location[0]
+    y_dist = 0
+    if (shot_location[1] < 36):
+        y_dist = 36 - shot_location[1]
+    elif (shot_location[1] > 44):
+        y_dist = shot_location[1] - 44
+    return math.sqrt(x_dist ** 2 + y_dist ** 2)
+    
 def save_data(team, folder_path, output_path):
     #'D:/SoccerMatchData/data/events'
     shot = []
@@ -259,22 +270,35 @@ def heatmap_shot(x, y):
     cbar.set_label('shot')
     plt.show()
 
-def logistic_regression(pLength, angle, goal):
+def logistic_regression(pLength, dist, goal):
     model_name = 'Logistic'
     models = {}
     models['Logistic'] = {}
     
     #X = np.column_stack((pLength, angle))
-    X = np.array(pLength).reshape(-1, 1)
+    X = np.column_stack((pLength, dist))
     y = goal
     
     models['Logistic']['model'] = LogisticRegression()
     models[model_name]['model'].fit(X, y)
     models[model_name]['y_pred'] = models[model_name]['model'].predict_proba(X)[:,1]
-    return models   
+    coefficients = models[model_name]['model'].coef_
+    intercept = models[model_name]['model'].intercept_
+    models[model_name]['coefficients'] = coefficients
+    models[model_name]['intercept'] = intercept
     
-def plot_logistic_regression(pLength, models):
+    return models
+ 
+def plot_logistic_regression(pLength, dist, models):
     plt.scatter(pLength, models['Logistic']['y_pred'], label='Predicted xG', color='blue', alpha=0.6)
+    coefficients = models['Logistic']['coefficients'][0]  
+    intercept = models['Logistic']['intercept'][0] 
+    
+    pLength_range = np.linspace(min(pLength), max(pLength), 100)
+    distance_range = np.mean(dist)
+    logistic_curve = 1 / (1 + np.exp(-(intercept + coefficients[0] * pLength_range + coefficients[1] * distance_range)))
+    
+    plt.plot(pLength_range, logistic_curve, label='Logistic Regression', color='red')
     plt.xlabel('pLength')
     plt.ylabel('Predicted xG')
     plt.title('Logistic Regression: Predicted xG vs pLength')
@@ -282,7 +306,92 @@ def plot_logistic_regression(pLength, models):
     plt.legend()
     plt.show()
     
+def plot_logistic_regression_3D(pLength, distance, models):
+    coefficients = models['Logistic']['coefficients'][0] 
+    intercept = models['Logistic']['intercept'][0] 
 
+    pLength_range = np.linspace(min(pLength), max(pLength), 100)
+    distance_range = np.linspace(min(distance), max(distance), 100)
+    pLength_grid, distance_grid = np.meshgrid(pLength_range, distance_range)
+
+    logistic_curve = 1 / (1 + np.exp(-(intercept 
+                                       + coefficients[0] * pLength_grid 
+                                       + coefficients[1] * distance_grid)))
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.plot_surface(pLength_grid, distance_grid, logistic_curve, cmap='viridis', alpha=0.6)
+
+    ax.scatter(pLength, distance, models['Logistic']['y_pred'], color='blue', label='Predicted xG', alpha=0.6)
+
+    ax.set_xlabel('pLength')
+    ax.set_ylabel('Distance')
+    ax.set_zlabel('Predicted xG')
+    ax.set_title('Logistic Regression: pLength and Distance vs Predicted xG')
+
+    plt.legend()
+    plt.show()
+
+def plot_logistic_regression_contour(pLength, distance, models):
+    # 提取模型系数和截距
+    coefficients = models['Logistic']['coefficients'][0]
+    intercept = models['Logistic']['intercept'][0]
+
+    # 生成 pLength 和 distance 的网格数据
+    pLength_range = np.linspace(min(pLength), max(pLength), 100)
+    distance_range = np.linspace(min(distance), max(distance), 100)
+    pLength_grid, distance_grid = np.meshgrid(pLength_range, distance_range)
+
+    # 使用逻辑回归公式计算联合影响 (logistic regression function)
+    logistic_curve = 1 / (1 + np.exp(-(intercept 
+                                       + coefficients[0] * pLength_grid 
+                                       + coefficients[1] * distance_grid)))
+
+    # 创建等高线图
+    plt.contourf(pLength_grid, distance_grid, logistic_curve, cmap='viridis', alpha=0.8)
+    plt.colorbar(label='Predicted xG')
+
+    # 添加实际数据点
+    plt.scatter(pLength, distance, c=models['Logistic']['y_pred'], edgecolor='black', label='Predicted xG', alpha=0.6)
+
+    # 设置图形标题和轴标签
+    plt.xlabel('pLength')
+    plt.ylabel('Distance')
+    plt.title('Logistic Regression: pLength and Distance vs Predicted xG (Contour)')
+    plt.legend()
+    plt.show()    
+      
+def plot_distance_vs_xg(pLength, distance, models):
+    coefficients = models['Logistic']['coefficients'][0] 
+    intercept = models['Logistic']['intercept'][0]  
+    
+    pLength_fixed = np.mean(pLength) 
+    
+    distance_range = np.linspace(min(distance), max(distance), 100)
+    
+    logistic_curve = 1 / (1 + np.exp(-(intercept 
+                                       + coefficients[0] * pLength_fixed 
+                                       + coefficients[1] * distance_range)))  
+    
+    plt.plot(distance_range, logistic_curve, label='Logistic Regression (distance effect)', color='red')
+    
+    plt.scatter(distance, models['Logistic']['y_pred'], color='blue', alpha=0.6, label='Predicted xG')
+    
+    plt.xlabel('Distance')
+    plt.ylabel('Predicted xG')
+    plt.title('Logistic Regression: Distance vs Predicted xG')
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+def calculate_r2(y_true, y_pred):
+    # ss_tot = np.sum((y_true - np.mean(y_true)) ** 2)
+    # ss_res = np.sum((y_true - y_pred) ** 2)
+    # r2 = 1 - (ss_res / ss_tot)
+    
+    return metrics.r2_score(y_true, y_pred)
+
+    
 if __name__ == "__main__":
         
     #save_data('Barcelona', 'D:/SoccerMatchData/data/events', 'D:/SoccerMatchData/data/try')
@@ -292,16 +401,30 @@ if __name__ == "__main__":
     shot_location = extract_data('D:/SoccerMatchData/data/try/shot_location.npy')
     pLength = extract_data('D:/SoccerMatchData/data/try/perceived_length.npy')
     goal_bool = extract_data('D:/SoccerMatchData/data/try/goal_bool.npy')
-    print(len(pLength))
+    dist = extract_data('D:/SoccerMatchData/data/try/dist.npy')
     # pLength = np.array([])
     # for i in shot_location:
     #     pLength = np.append(pLength, perceived_length(i))
     # np.save('D:/SoccerMatchData/data/try' + '/perceived_length.npy', pLength)
-    #np.set_printoptions(threshold=np.inf)
-    #print(pLength)
-    angle = []
-    model = logistic_regression(pLength, angle, goal_bool)
-    plot_logistic_regression(pLength, model)
+    # dist = np.array([])
+    # for i in shot_location:
+    #     dist = np.append(dist, calculate_distance(i))
+    # np.save('D:/SoccerMatchData/data/try' + '/dist.npy', dist)
+    # np.set_printoptions(threshold=np.inf)
+    # print(dist)
+    model = logistic_regression(pLength, dist, goal_bool)
+    coefficients = model['Logistic']['coefficients']
+    intercept = model['Logistic']['intercept']
+    plot_logistic_regression(pLength, dist, model)
+    #plot_logistic_regression_contour(pLength, dist, model)
+    #plot_distance_vs_xg(pLength, dist, model)
+    
+    y_pred = model['Logistic']['y_pred']
+    y_true = goal_bool
+
+    r2_value = calculate_r2(y_true, y_pred)
+    print(r2_value)
+
     #print(goal_coor)
     # x = goal_coor[:, 0]
     # y = goal_coor[:, 1]
