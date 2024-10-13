@@ -333,28 +333,21 @@ def plot_logistic_regression_3D(pLength, distance, models):
     plt.show()
 
 def plot_logistic_regression_contour(pLength, distance, models):
-    # 提取模型系数和截距
     coefficients = models['Logistic']['coefficients'][0]
     intercept = models['Logistic']['intercept'][0]
 
-    # 生成 pLength 和 distance 的网格数据
     pLength_range = np.linspace(min(pLength), max(pLength), 100)
     distance_range = np.linspace(min(distance), max(distance), 100)
     pLength_grid, distance_grid = np.meshgrid(pLength_range, distance_range)
-
-    # 使用逻辑回归公式计算联合影响 (logistic regression function)
     logistic_curve = 1 / (1 + np.exp(-(intercept 
                                        + coefficients[0] * pLength_grid 
                                        + coefficients[1] * distance_grid)))
 
-    # 创建等高线图
     plt.contourf(pLength_grid, distance_grid, logistic_curve, cmap='viridis', alpha=0.8)
     plt.colorbar(label='Predicted xG')
 
-    # 添加实际数据点
     plt.scatter(pLength, distance, c=models['Logistic']['y_pred'], edgecolor='black', label='Predicted xG', alpha=0.6)
 
-    # 设置图形标题和轴标签
     plt.xlabel('pLength')
     plt.ylabel('Distance')
     plt.title('Logistic Regression: pLength and Distance vs Predicted xG (Contour)')
@@ -416,9 +409,9 @@ if __name__ == "__main__":
     coefficients = model['Logistic']['coefficients']
     intercept = model['Logistic']['intercept']
     plot_logistic_regression(pLength, dist, model)
-    #plot_logistic_regression_contour(pLength, dist, model)
-    #plot_distance_vs_xg(pLength, dist, model)
-    
+    plot_logistic_regression_contour(pLength, dist, model)
+    plot_distance_vs_xg(pLength, dist, model)
+    plot_logistic_regression_3D(pLength, dist, model)
     y_pred = model['Logistic']['y_pred']
     y_true = goal_bool
 
